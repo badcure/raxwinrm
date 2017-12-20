@@ -2,3 +2,5 @@ requests>=2.10.0
 requests-mock
 zeep
 jinja2
+requests-ntlm
+xmltodict

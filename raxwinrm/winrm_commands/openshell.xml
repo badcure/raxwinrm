@@ -4,7 +4,7 @@
         xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">
     <s:Header>
         <wsa:To>
-            http://localhost:80/wsman
+            {{ uri }}
         </wsa:To>
         <wsman:ResourceURI s:mustUnderstand="true">
             http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd
@@ -18,7 +18,7 @@
             http://schemas.xmlsoap.org/ws/2004/09/transfer/Create
         </wsa:Action>
         <wsman:MaxEnvelopeSize s:mustUnderstand="true">153600</wsman:MaxEnvelopeSize>
-        <wsa:MessageID>uuid:AF6A2E07-BA33-496E-8AFA-E77D241A2F2F</wsa:MessageID>
+        <wsa:MessageID>uuid:{{ message_id }}</wsa:MessageID>
         <wsman:Locale xml:lang="en-US" s:mustUnderstand="false"/>
         <wsman:OptionSet xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
             <wsman:Option Name="WINRS_NOPROFILE">TRUE</wsman:Option>
@@ -36,8 +36,8 @@
                 {%- endfor %}
             </rsp:Environment>
             {%- endif %}
-            <rsp:WorkingDirectory>{{ temp_dir }}</rsp:WorkingDirectory>
-            <rsp:IdleTimeout>PT300.000S</rsp:IdleTimeout>
+            <rsp:WorkingDirectory>{{ work_dir }}</rsp:WorkingDirectory>
+            <rsp:IdleTimeout>PT{{ idle_timeout }}.000S</rsp:IdleTimeout>
             <rsp:InputStreams>stdin</rsp:InputStreams>
             <rsp:OutputStreams>stdout stderr</rsp:OutputStreams>
         </rsp:Shell>

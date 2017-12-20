@@ -1,10 +1,10 @@
-<s:Envelope
+ <s:Envelope
    xmlns:s="http://www.w3.org/2003/05/soap-envelope"
    xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
    xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">
    <s:Header>
      <wsa:To>
-       http://localhost:80/wsman
+       {{ uri }}
      </wsa:To>
      <wsman:ResourceURI s:mustUnderstand="true">
        http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd
@@ -19,7 +19,7 @@
      </wsa:Action>
      <wsman:MaxEnvelopeSize s:mustUnderstand="true">153600</wsman:MaxEnvelopeSize>
      <wsa:MessageID>
-       uuid:F8671978-E928-49DA-ADB8-5BF97EDD9535</wsa:MessageID>
+       uuid:{{ message_id }}</wsa:MessageID>
      <wsman:Locale xml:lang="en-US" s:mustUnderstand="false" />
      <wsman:SelectorSet>
          <wsman:Selector Name="ShellId">
@@ -30,16 +30,17 @@
          <wsman:Option Name="WINRS_CONSOLEMODE_STDIN">TRUE</wsman:Option>
          <wsman:Option Name="WINRS_SKIP_CMD_SHELL">FALSE</wsman:Option>
      </wsman:OptionSet>
-     <wsman:OperationTimeout>PT60.000S</wsman:OperationTimeout>
+     <wsman:OperationTimeout>PT{{ timeout }}.000S</wsman:OperationTimeout>
    </s:Header>
    <s:Body>
      <rsp:CommandLine
        xmlns:rsp="http://schemas.microsoft.com/wbem/wsman/1/windows/shell">
-       <rsp:Command>del</rsp:Command>
-       <rsp:Arguments>/p</rsp:Arguments>
-       <rsp:Arguments>
-         d:\temp\out.txt
-       </rsp:Arguments>
+       <rsp:Command>{{ command }}</rsp:Command>
+        {%- if command_args is defined and command_args %}
+            {%- for arg in command_args %}
+                <rsp:Arguments>{{ arg }}</rsp:Arguments>
+            {%- endfor %}
+         {%- endif %}
      </rsp:CommandLine>
    </s:Body>
  </s:Envelope>
