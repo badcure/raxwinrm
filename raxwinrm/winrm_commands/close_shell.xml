@@ -1,0 +1,33 @@
+ <s:Envelope
+   xmlns:s="http://www.w3.org/2003/05/soap-envelope"
+   xmlns:wsa="http://schemas.xmlsoap.org/ws/2004/08/addressing"
+   xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">
+   <s:Header>
+     <wsa:To>
+       {{ uri }}
+     </wsa:To>
+     <wsa:ReplyTo>
+       <wsa:Address s:mustUnderstand="true">
+         http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous
+       </wsa:Address>
+     </wsa:ReplyTo>
+     <wsa:Action s:mustUnderstand="true">
+       http://schemas.xmlsoap.org/ws/2004/09/transfer/Delete
+     </wsa:Action>
+     <wsman:MaxEnvelopeSize s:mustUnderstand="true">153600</wsman:MaxEnvelopeSize>
+     <wsa:MessageID>uuid:{{ message_id }}</wsa:MessageID>
+     <wsman:Locale xml:lang="en-US" s:mustUnderstand="false" />
+     <wsman:ResourceURI
+       xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">
+       http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd
+     </wsman:ResourceURI>
+     <wsman:SelectorSet xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd"
+       xmlns="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">
+         <wsman:Selector Name="ShellId">
+           {{ shell_id }}
+         </wsman:Selector>
+     </wsman:SelectorSet>
+     <wsman:OperationTimeout>PT{{ timeout }}.000S</wsman:OperationTimeout>
+   </s:Header>
+   <s:Body></s:Body>
+ </s:Envelope>

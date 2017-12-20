@@ -14,6 +14,11 @@ SOAP_ENV = Environment(
 )
 
 
+def disable_request_logging():
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
 class WinRMConnection(object):
 
     url_template = 'https://{hostname}:{port}/wsman'
@@ -31,31 +36,27 @@ class WinRMConnection(object):
         if not username or not password:
             raise ValueError("Need username and password defined")
 
-    def setup_connection(self):
-        self.session = requests.Session()
+    def _sent_winrm_command(self, template_name, template_args=None):
+        if template_args is None:
+            template_args = {}
 
-    def create_shell(self):
-        """
-        https://msdn.microsoft.com/en-us/library/cc251546.aspx
-
-        :return: None
-        """
-        if not self.session:
-            self.setup_connection()
-        template = SOAP_ENV.get_template('openshell.xml')
         message_id = uuid.uuid4()
+        template = SOAP_ENV.get_template(template_name)
         url = self.url_template.format(hostname=self.hostname, port=self.port)
-
-        data = template.render({
+        template_data = {
             'uri': url,
             'message_id': message_id,
             'idle_timeout': 300,
-            'work_dir': '%USERPROFILE%\AppData\Local\Temp'
-        })
+        }
+        template_data.update(template_args)
+
+        data = template.render(template_data)
+
         headers = {
             'Content-Type': 'application/soap+xml;charset=UTF-8',
             'User-Agent': 'RaxWinRM',
         }
+
         self.prepared_statement = requests.Request(
             'POST', url=url, headers=headers, data=data, auth=HttpNtlmAuth(username=self.username, password=self.password)).prepare()
 
@@ -65,88 +66,107 @@ class WinRMConnection(object):
         except requests.HTTPError as http_exc:
             raise raxwinrm_exceptions.WinRMResponseException(http_exc)
 
-        response_xml = xmltodict.parse(response.text)
+        return xmltodict.parse(response.text)
+
+    def setup_connection(self):
+        self.session = requests.Session()
+
+    def connect(self):
+        """
+        https://msdn.microsoft.com/en-us/library/cc251739.aspx
+
+        :return: ShellId UUID from WinRM
+        """
+        if not self.session:
+            self.setup_connection()
+
+        response_xml = self._sent_winrm_command('openshell.xml', {
+            'work_dir': '%USERPROFILE%\AppData\Local\Temp'
+        })
         self.shell_id = response_xml['s:Envelope']['s:Body']['rsp:Shell']['rsp:ShellId']
         return self.shell_id
 
-    def execute_command(self, command, command_args=None):
-        if self.shell_id is None:
-            self.create_shell()
+    def execute_command(self, command, command_args=None, shell_id=None):
+        """
+        Execute command example: https://msdn.microsoft.com/en-us/library/cc251740.aspx
 
-        template = SOAP_ENV.get_template('execute_command.xml')
-        message_id = uuid.uuid4()
-        url = self.url_template.format(hostname=self.hostname, port=self.port)
+        :param command: Command to run(e.g. dir)
+        :param command_args: Arguments for the command(e.g. c:\)
+        :return: Command UUID from WinRM
+        """
+        if shell_id is None:
+            shell_id = self.shell_id
 
-        data = template.render({
-            'uri': url,
-            'message_id': message_id,
-            'shell_id': self.shell_id,
+        if shell_id is None:
+            shell_id = self.connect()
+
+        response_xml = self._sent_winrm_command('execute_command.xml', {
             'command': command,
             'command_args': command_args,
-            'timeout': 60
+            'shell_id': shell_id,
         })
-
-        headers = {
-            'Content-Type': 'application/soap+xml;charset=UTF-8',
-            'User-Agent': 'RaxWinRM',
-        }
-        self.prepared_statement = requests.Request(
-            'POST', url=url, headers=headers, data=data, auth=HttpNtlmAuth(username=self.username, password=self.password)).prepare()
-
-        response = self.session.send(self.prepared_statement, verify=self.verify, timeout=10)
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as http_exc:
-            raise raxwinrm_exceptions.WinRMResponseException(http_exc)
-
-        response_xml = xmltodict.parse(response.text)
         self.last_command = response_xml['s:Envelope']['s:Body']['rsp:CommandResponse']['rsp:CommandId']
         return self.last_command
 
-    def command_output(self, command_id=None):
+    def command_output(self, command_id=None, shell_id=None):
+        """
+        Command Output: https://msdn.microsoft.com/en-us/library/cc251741.aspx
+
+        :param command_id: Command ID returned. Uses the last command ID if None provided.
+        :return: exit_code(int), stdout_result(str), stderr_result(str)
+        """
         if command_id is None:
             command_id = self.last_command
+        if shell_id is None:
+            shell_id = self.shell_id
 
-        template = SOAP_ENV.get_template('response.xml')
-        message_id = uuid.uuid4()
-        url = self.url_template.format(hostname=self.hostname, port=self.port)
-
-        data = template.render({
-            'uri': url,
-            'message_id': message_id,
-            'shell_id': self.shell_id,
+        response_xml = self._sent_winrm_command('response.xml', {
+            'shell_id': shell_id,
             'command_id': command_id,
-            'timeout': 60
         })
 
-        headers = {
-            'Content-Type': 'application/soap+xml;charset=UTF-8',
-            'User-Agent': 'RaxWinRM',
-        }
-        self.prepared_statement = requests.Request(
-            'POST', url=url, headers=headers, data=data, auth=HttpNtlmAuth(username=self.username, password=self.password)).prepare()
-
-        response = self.session.send(self.prepared_statement, verify=self.verify, timeout=10)
-        try:
-            response.raise_for_status()
-        except requests.HTTPError as http_exc:
-            raise raxwinrm_exceptions.WinRMResponseException(http_exc)
-
-        response_xml = xmltodict.parse(response.text)
         stdout_result = ''
         stderr_result = ''
         exit_code = int(response_xml['s:Envelope']['s:Body']['rsp:ReceiveResponse']['rsp:CommandState']['rsp:ExitCode'])
         for line_output in response_xml['s:Envelope']['s:Body']['rsp:ReceiveResponse']['rsp:Stream']:
+            if line_output.get('@End', False):
+                continue
             if line_output['@Name'] == 'stdout':
                 stdout_result += base64.b64decode(line_output['#text'])
             if line_output['@Name'] == 'stderr':
                 stderr_result += base64.b64decode(line_output['#text'])
         return exit_code, stdout_result, stderr_result
 
+    def close(self, shell_id=None):
+        """
+        https://msdn.microsoft.com/en-us/library/cc251746.aspx
 
-    def close(self):
-        self.session.close()
-        self.session = None
+        :return: ShellId UUID from WinRM
+        """
+        successfully_close = False
+        if shell_id is None:
+            shell_id = self.shell_id
+        if self.shell_id is None:
+            return
+
+        if self.session is None:
+            self.setup_connection()
+
+        try:
+            self._sent_winrm_command('close_shell.xml', {
+                'shell_id': shell_id
+            })
+            successfully_close = True
+        except raxwinrm_exceptions.WinRMResponseException as exc:
+            if exc.code == 'w:InvalidSelectors':
+                # Shell ID is invalid. No need to raise an exception.
+                pass
+            else:
+                raise
+        finally:
+            self.session.close()
+            self.session = None
+        return successfully_close
 
 
 class WinRMConnectionHTTPS(WinRMConnection):
